@@ -1,0 +1,22 @@
+name: Garder Supabase actif
+
+# Empêche la mise en pause du projet Supabase (offre gratuite) en générant
+# une petite activité régulière. Tourne tous les 2 jours, et peut aussi être
+# lancé à la main depuis l'onglet "Actions" de GitHub (bouton "Run workflow").
+on:
+  schedule:
+    - cron: '0 6 */2 * *'   # tous les 2 jours à 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping de l'API Supabase
+        run: |
+          curl -s -X POST \
+            "https://zylqaqjxydezaorlhmhd.supabase.co/rest/v1/rpc/get_classe_publique" \
+            -H "apikey: sb_publishable_DMp41bDKjHpozmWofyT2aw_G4DUqOBp" \
+            -H "Content-Type: application/json" \
+            -d '{"p_slug":"ping-keepalive"}' \
+            -o /dev/null -w "Ping Supabase -> HTTP %{http_code}\n"
