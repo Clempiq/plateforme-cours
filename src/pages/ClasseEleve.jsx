@@ -54,7 +54,7 @@ export default function ClasseEleve() {
         <div className="text-center py-20 px-4">
           <p className="text-4xl mb-3">🔍</p>
           <p className="text-slate-600">Cette classe est introuvable.</p>
-          <p className="text-sm text-slate-400 mt-1">Vérifie le code transmis par ton enseignante.</p>
+          <p className="text-sm text-slate-400 mt-1">Vérifie le code transmis par ton professeur.</p>
         </div>
       </Shell>
     )
@@ -64,7 +64,7 @@ export default function ClasseEleve() {
   const hasContent = allChapitres.length > 0
 
   return (
-    <Shell classe={data.classe.libelle} matiere={SITE.matiere}>
+    <Shell classe={data.classe.libelle} matiere={data.classe.matiere || SITE.matiere}>
       <div className="px-4 pt-4 max-w-5xl mx-auto w-full">
         <input
           type="search"
@@ -203,7 +203,7 @@ function Shell({ classe, matiere, children }) {
       </header>
       <main className="flex-1 w-full">{children}</main>
       <footer className="py-6 text-center text-xs text-slate-400">
-        Documents mis à disposition par ton enseignante.
+        Documents mis à disposition par ton professeur.
       </footer>
     </div>
   )

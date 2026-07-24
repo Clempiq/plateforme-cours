@@ -4,9 +4,10 @@ La V1 vise un usage mono-enseignant (une enseignante, sa matière). Les points
 ci-dessous sont notés pour une évolution ultérieure, à ne pas implémenter en V1.
 
 ## Multi-enseignants / multi-matières
-- [ ] Inscription en libre-service des enseignants (création de compte autonome).
+- [x] Inscription en libre-service **par code d'invitation** (page /inscription + Edge Function).
 - [ ] Champ **matière** renseigné à l'inscription, affiché en tête de l'espace élève.
 - [ ] Gérer le cas de **plusieurs matières** pour un même élève / une même classe.
+- [ ] Petite interface admin pour générer/voir les codes d'invitation (aujourd'hui en SQL).
 
 ## Espace d'édition de classe enrichi (admin)
 - [x] Grand **titre / domaine** au-dessus des chapitres (hiérarchie 3 niveaux).

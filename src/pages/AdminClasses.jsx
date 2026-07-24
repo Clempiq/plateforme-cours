@@ -1,20 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
-import { admin, signOut } from '../api.js'
+import { admin, signOut, getProfile } from '../api.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
+
+// Matières principales, ordre alphabétique (+ « Autre… » dans le menu).
+const SUBJECTS = [
+  'Allemand', 'Anglais', 'Arts plastiques', 'Éducation musicale',
+  'Éducation physique et sportive (EPS)', 'Enseignement moral et civique (EMC)',
+  'Espagnol', 'Français', 'Géographie', 'Histoire', 'Histoire-Géographie',
+  'Italien', 'Latin', 'Mathématiques', 'Numérique et sciences informatiques (NSI)',
+  'Philosophie', 'Physique-Chimie', 'Sciences de la vie et de la Terre (SVT)',
+  'Sciences économiques et sociales (SES)', 'Technologie',
+]
 
 // Liste des classes (tableau de bord admin). #/admin/classes
 export default function AdminClasses({ onLogout }) {
   const [classes, setClasses] = useState([])
   const [newLibelle, setNewLibelle] = useState('')
   const [newCode, setNewCode] = useState('')
+  const [matiereSel, setMatiereSel] = useState('')
+  const [matiereAutre, setMatiereAutre] = useState('')
   const [error, setError] = useState(null)
   const [confirm, setConfirm] = useState(null) // {id, libelle}
   const [copiedId, setCopiedId] = useState(null)
   const [copiedLinkId, setCopiedLinkId] = useState(null)
   const [qrClass, setQrClass] = useState(null)
+  const [profile, setProfile] = useState({ prenom: '', matiere: '' })
   const navigate = useNavigate()
+
+  useEffect(() => {
+    getProfile().then(setProfile).catch(() => {})
+  }, [])
 
   async function copyText(text) {
     if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true }
@@ -36,9 +53,10 @@ export default function AdminClasses({ onLogout }) {
     e.preventDefault()
     if (!newLibelle.trim()) return
     const custom = newCode.trim() ? cleanSlug(newCode) : null
+    const matiere = matiereSel === '__autre__' ? (matiereAutre.trim() || null) : (matiereSel || null)
     try {
-      await admin.createClasse(newLibelle.trim(), custom)
-      setNewLibelle(''); setNewCode(''); setError(null); reload()
+      await admin.createClasse(newLibelle.trim(), custom, matiere)
+      setNewLibelle(''); setNewCode(''); setMatiereSel(''); setMatiereAutre(''); setError(null); reload()
     } catch (err) { setError(err.message) }
   }
 
@@ -74,8 +92,10 @@ export default function AdminClasses({ onLogout }) {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Espace enseignante</p>
-            <h1 className="font-bold text-slate-800">Mes classes</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Espace enseignant</p>
+            <h1 className="font-bold text-slate-800">
+              {profile.prenom ? `Bonjour ${profile.prenom} 👋` : 'Mes classes'}
+            </h1>
           </div>
           <button onClick={() => signOut().then(onLogout)} className="text-sm text-slate-500 hover:text-slate-800">Déconnexion</button>
         </div>
@@ -96,6 +116,23 @@ export default function AdminClasses({ onLogout }) {
               Créer
             </button>
           </div>
+          <select
+            value={matiereSel}
+            onChange={(e) => setMatiereSel(e.target.value)}
+            className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
+            <option value="">Matière (facultatif)</option>
+            {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
+            <option value="__autre__">Autre…</option>
+          </select>
+          {matiereSel === '__autre__' && (
+            <input
+              value={matiereAutre}
+              onChange={(e) => setMatiereAutre(e.target.value)}
+              placeholder="Préciser la matière"
+              autoFocus
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+            />
+          )}
           <input
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
@@ -103,7 +140,7 @@ export default function AdminClasses({ onLogout }) {
             className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
           />
           <p className="text-xs text-slate-400">
-            Le code sert d'adresse à la classe. Laisse vide pour un code généré au hasard. Il n'est plus modifiable ensuite.
+            La matière s'affiche en haut de l'espace élève. Le code sert d'adresse à la classe : laisse vide pour un code au hasard, il n'est plus modifiable ensuite.
           </p>
         </form>
 
@@ -121,6 +158,7 @@ export default function AdminClasses({ onLogout }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="font-semibold text-slate-800 group-hover:text-emerald-700">{c.libelle}</h2>
+                    {c.matiere && <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">{c.matiere}</span>}
                     {c.nb_masques > 0 && (
                       <span className="text-xs bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
                         {c.nb_masques} masqué{c.nb_masques > 1 ? 's' : ''}

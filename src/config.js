@@ -7,5 +7,5 @@ export const SITE = {
   titre: 'Espace de cours',         // titre principal de la page d'accueil
   enseignante: '',                  // ex. 'Mme Martin' — laisser vide pour ne pas l'afficher
   etablissement: '',                // ex. 'Collège Jean Moulin' — vide = masqué
-  message_eleve: "Ouvre le lien de ta classe transmis par ton enseignante.",
+  message_eleve: "Ouvre le lien de ta classe transmis par ton professeur.",
 }

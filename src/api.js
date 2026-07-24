@@ -60,9 +60,38 @@ export async function signIn(email, password) {
 export async function signOut() {
   await supabase.auth.signOut()
 }
+// Envoie un e-mail de réinitialisation de mot de passe.
+export async function resetPasswordRequest(email) {
+  const redirectTo = window.location.origin + window.location.pathname
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+  if (error) throw new Error(error.message)
+}
+// Définit un nouveau mot de passe (après clic sur le lien de réinitialisation).
+export async function updatePassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) throw new Error(error.message)
+}
+// Inscription enseignante gardée par un code d'invitation (Edge Function).
+export async function signUpWithCode(email, password, code, extra = {}) {
+  const res = await fetch(`${url}/functions/v1/inscription`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: key, Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ email, password, code, ...extra }),
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new Error((data && data.error) || 'Inscription impossible.')
+  return data
+}
 export async function getSession() {
   const { data } = await supabase.auth.getSession()
   return data.session
+}
+// Profil de l'enseignant connecté (nom, prénom, matière) depuis ses métadonnées.
+export async function getProfile() {
+  const { data } = await supabase.auth.getSession()
+  const u = data.session?.user
+  const m = u?.user_metadata || {}
+  return { email: u?.email || '', prenom: m.prenom || '', nom: m.nom || '', matiere: m.matiere || '' }
 }
 
 /* ---------- Admin (protégé par RLS : nécessite une session) ---------- */
@@ -94,14 +123,15 @@ export const admin = {
   tree: (classe_id) => rpc('get_admin_tree', { p_classe_id: classe_id }),
 
   // Classes
-  async createClasse(libelle, customSlug = null) {
+  async createClasse(libelle, customSlug = null, matiere = null) {
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id
     if (!uid) throw new Error('Session expirée. Reconnecte-toi et réessaie.')
+    const base = { libelle, owner_id: uid, matiere: matiere || null }
 
     if (customSlug) {
       const { data, error } = await supabase.from('classes')
-        .insert({ libelle, slug: customSlug, owner_id: uid }).select().single()
+        .insert({ ...base, slug: customSlug }).select().single()
       if (error) {
         if (error.code === '23505') throw new Error('Ce code est déjà utilisé par une autre classe.')
         throw new Error(error.message)
@@ -111,7 +141,7 @@ export const admin = {
     for (let i = 0; i < 5; i++) {
       const slug = randomSlug(libelle)
       const { data, error } = await supabase.from('classes')
-        .insert({ libelle, slug, owner_id: uid }).select().single()
+        .insert({ ...base, slug }).select().single()
       if (!error) return data
       if (error.code !== '23505') throw new Error(error.message) // 23505 = slug déjà pris, on réessaie
     }
