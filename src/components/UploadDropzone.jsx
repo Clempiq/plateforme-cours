@@ -51,7 +51,7 @@ export default function UploadDropzone({ chapitreId, onUploaded }) {
         role="button"
         tabIndex={0}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
-        className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${drag ? 'border-indigo-400 bg-indigo-50' : 'border-slate-300 hover:border-slate-400'}`}>
+        className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${drag ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 hover:border-slate-400'}`}>
         <p className="text-3xl mb-1">⬆️</p>
         <p className="text-sm text-slate-600">Glisse un ou plusieurs fichiers ici, ou clique pour choisir.</p>
         <p className="text-xs text-slate-400 mt-1">PDF, images, DOCX, ODT, XLSX, MP4 — 50 Mo max.</p>
@@ -78,7 +78,7 @@ export default function UploadDropzone({ chapitreId, onUploaded }) {
               {x.status === 'error'
                 ? <p className="text-red-600">{x.error}</p>
                 : <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full bg-indigo-500 ${x.status === 'done' ? 'w-full' : 'w-1/2 animate-pulse'}`} />
+                    <div className={`h-full bg-emerald-500 ${x.status === 'done' ? 'w-full' : 'w-1/2 animate-pulse'}`} />
                   </div>}
             </div>
           ))}

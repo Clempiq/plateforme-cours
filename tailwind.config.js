@@ -4,10 +4,20 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Fond crème (identité émeraude + crème)
+        cream: {
+          DEFAULT: '#f6f2e9',
+          50: '#fbf9f3',
+          100: '#f6f2e9',
+          200: '#ece4d3',
+        },
         // Couleurs de type de document
-        cours:      '#0f766e', // teal
+        cours:      '#047857', // emerald-700
         controle:   '#b45309', // amber foncé
-        correction: '#6d28d9', // violet
+        correction: '#7c3aed', // violet
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       },
     },
   },

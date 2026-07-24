@@ -73,11 +73,12 @@ async function rpc(name, args) {
 }
 
 async function objetClesForClasse(classe_id) {
-  const { data } = await supabase
-    .from('documents')
-    .select('objet_cle, chapitre_id, chapitres!inner(classe_id)')
-    .eq('chapitres.classe_id', classe_id)
-  return (data || []).map((d) => d.objet_cle)
+  const { data } = await supabase.rpc('objet_cles_classe', { p_classe_id: classe_id })
+  return data || []
+}
+async function objetClesForDomaine(domaine_id) {
+  const { data } = await supabase.rpc('objet_cles_domaine', { p_domaine_id: domaine_id })
+  return data || []
 }
 async function objetClesForChapitre(chapitre_id) {
   const { data } = await supabase.from('documents').select('objet_cle').eq('chapitre_id', chapitre_id)
@@ -93,18 +94,39 @@ export const admin = {
   tree: (classe_id) => rpc('get_admin_tree', { p_classe_id: classe_id }),
 
   // Classes
-  async createClasse(libelle) {
+  async createClasse(libelle, customSlug = null) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const uid = session?.user?.id
+    if (!uid) throw new Error('Session expirée. Reconnecte-toi et réessaie.')
+
+    if (customSlug) {
+      const { data, error } = await supabase.from('classes')
+        .insert({ libelle, slug: customSlug, owner_id: uid }).select().single()
+      if (error) {
+        if (error.code === '23505') throw new Error('Ce code est déjà utilisé par une autre classe.')
+        throw new Error(error.message)
+      }
+      return data
+    }
     for (let i = 0; i < 5; i++) {
       const slug = randomSlug(libelle)
-      const { data, error } = await supabase.from('classes').insert({ libelle, slug }).select().single()
+      const { data, error } = await supabase.from('classes')
+        .insert({ libelle, slug, owner_id: uid }).select().single()
       if (!error) return data
       if (error.code !== '23505') throw new Error(error.message) // 23505 = slug déjà pris, on réessaie
     }
-    throw new Error('Impossible de générer un identifiant de classe unique.')
+    throw new Error('Impossible de générer un code unique, réessaie.')
   },
   async renameClasse(id, libelle) {
     const { error } = await supabase.from('classes').update({ libelle }).eq('id', id)
     if (error) throw new Error(error.message)
+  },
+  async updateSlug(id, slug) {
+    const { error } = await supabase.from('classes').update({ slug }).eq('id', id)
+    if (error) {
+      if (error.code === '23505') throw new Error('Ce code est déjà utilisé par une autre classe.')
+      throw new Error(error.message)
+    }
   },
   async deleteClasse(id) {
     await removeFiles(await objetClesForClasse(id))
@@ -112,12 +134,38 @@ export const admin = {
     if (error) throw new Error(error.message)
   },
 
-  // Chapitres
-  async createChapitre(classe_id, libelle) {
-    const { data: last } = await supabase.from('chapitres')
+  // Grands titres (domaines)
+  async createDomaine(classe_id, libelle, description = null) {
+    const { data: last } = await supabase.from('domaines')
       .select('ordre').eq('classe_id', classe_id).order('ordre', { ascending: false }).limit(1)
     const ordre = (last && last[0] ? last[0].ordre : 0) + 1
-    const { error } = await supabase.from('chapitres').insert({ classe_id, libelle, ordre })
+    const { data, error } = await supabase.from('domaines')
+      .insert({ classe_id, libelle, description, ordre }).select('id').single()
+    if (error) throw new Error(error.message)
+    return data.id
+  },
+  async updateDomaine(id, fields) {
+    const { error } = await supabase.from('domaines').update(fields).eq('id', id)
+    if (error) throw new Error(error.message)
+  },
+  async deleteDomaine(id) {
+    await removeFiles(await objetClesForDomaine(id))
+    const { error } = await supabase.from('domaines').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+  },
+
+  // Chapitres (rattachés à un grand titre)
+  async createChapitre(domaine_id, libelle, description = null) {
+    const { data: last } = await supabase.from('chapitres')
+      .select('ordre').eq('domaine_id', domaine_id).order('ordre', { ascending: false }).limit(1)
+    const ordre = (last && last[0] ? last[0].ordre : 0) + 1
+    const { data, error } = await supabase.from('chapitres')
+      .insert({ domaine_id, libelle, description, ordre }).select('id').single()
+    if (error) throw new Error(error.message)
+    return data.id
+  },
+  async updateChapitre(id, fields) {
+    const { error } = await supabase.from('chapitres').update(fields).eq('id', id)
     if (error) throw new Error(error.message)
   },
   async renameChapitre(id, libelle) {
@@ -154,7 +202,12 @@ export async function uploadDocument({ chapitre_id, type, libelle, file }) {
   if (!ALLOWED_EXT.includes(ext)) throw new Error('Format de fichier non autorisé.')
   if (file.size > 50 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 50 Mo).')
 
-  const key = randomKey(ext) // nom physique aléatoire (Règle 3)
+  // Rangé dans un dossier au nom du propriétaire (cloisonnement multi-enseignants) :
+  // "<uid>/<aléatoire>.ext". Le nom reste imprévisible (Règle 3).
+  const { data: { session } } = await supabase.auth.getSession()
+  const uid = session?.user?.id
+  if (!uid) throw new Error('Session expirée. Reconnecte-toi.')
+  const key = `${uid}/${randomKey(ext)}`
   const { error: upErr } = await supabase.storage.from(BUCKET)
     .upload(key, file, { contentType: file.type || 'application/octet-stream', upsert: false })
   if (upErr) throw new Error(upErr.message)

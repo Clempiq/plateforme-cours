@@ -33,7 +33,7 @@ export default function AdminLogin({ onLogged }) {
           placeholder="Adresse e-mail"
           autoFocus
           autoComplete="username"
-          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
         />
         <input
           type="password"
@@ -41,13 +41,13 @@ export default function AdminLogin({ onLogged }) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Mot de passe"
           autoComplete="current-password"
-          className="mt-3 w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          className="mt-3 w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
         />
         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
         <button
           type="submit"
           disabled={busy || !email || !password}
-          className="mt-4 w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+          className="mt-4 w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Connexion…' : 'Se connecter'}
         </button>
       </form>

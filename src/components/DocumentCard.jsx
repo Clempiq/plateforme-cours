@@ -32,7 +32,7 @@ export default function DocumentCard({ doc }) {
             onClick={() => open(false)}
             disabled={busy}
             aria-label={`Visualiser ${doc.libelle}`}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
             Voir
           </button>
         )}
