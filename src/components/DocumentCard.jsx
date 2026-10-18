@@ -1,49 +1,102 @@
 import { useState } from 'react'
 import { openDocument } from '../api.js'
-import { formatSize, isPdf, isImage } from '../lib.js'
-
-// Carte document côté ÉLÈVE : visualiser + télécharger (liens signés).
-export default function DocumentCard({ doc }) {
-  const viewable = isPdf(doc.mime) || isImage(doc.mime)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState(false)
-
+import { formatSize, formatDate, isPdf, isImage, TYPES } from '../lib.js'
+import Icon from './Icon.jsx'
+export default function DocumentCard({
+  doc,
+  mark = {},
+  onMark,
+  showChapter = false,
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('')
   async function open(download) {
-    setBusy(true); setErr(false)
-    try { await openDocument(doc, download) }
-    catch { setErr(true) }
-    finally { setBusy(false) }
+    setBusy(true)
+    setError('')
+    try {
+      await openDocument(doc, download)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
-
   return (
-    <div className="flex items-center gap-3 py-3">
-      <div className="shrink-0 w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500" aria-hidden="true">
-        {isPdf(doc.mime) ? '📄' : isImage(doc.mime) ? '🖼️' : '📎'}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-800 truncate">{doc.libelle}</p>
-        <p className="text-xs text-slate-400">
-          {formatSize(doc.taille)}{err && <span className="text-red-500"> · indisponible</span>}
+    <article className="document-row">
+      <span className="document-icon">
+        <Icon name="file" size={23} />
+      </span>
+      <div className="document-main">
+        <span
+          className={
+            'badge ' +
+            (doc.type === 'controle'
+              ? 'badge-amber'
+              : doc.type === 'correction'
+                ? 'badge-purple'
+                : '')
+          }
+        >
+          {TYPES[doc.type]?.label || 'Document'}
+        </span>
+        <h3>{doc.libelle}</h3>
+        <p className="document-meta">
+          {showChapter && <>{doc.chapitre} · </>}
+          {formatSize(doc.taille)}
+          {doc.depose_le && <> · ajouté le {formatDate(doc.depose_le)}</>}
         </p>
-      </div>
-      <div className="flex gap-2 shrink-0">
-        {viewable && (
+        <div className="document-actions">
+          {(isPdf(doc.mime) ||
+            isImage(doc.mime) ||
+            doc.mime === 'video/mp4') && (
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={busy}
+              onClick={() => open(false)}
+              aria-label={'Ouvrir ' + doc.libelle}
+            >
+              <Icon name="eye" size={15} />
+              Ouvrir
+            </button>
+          )}
           <button
-            onClick={() => open(false)}
+            className="btn btn-quiet btn-sm"
             disabled={busy}
-            aria-label={`Visualiser ${doc.libelle}`}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
-            Voir
+            onClick={() => open(true)}
+            aria-label={'Télécharger ' + doc.libelle}
+          >
+            <Icon name="download" size={15} />
+            {busy ? 'Ouverture…' : 'Télécharger'}
           </button>
+        </div>
+        {error && (
+          <p role="alert" className="notice notice-error">
+            {error}
+          </p>
         )}
-        <button
-          onClick={() => open(true)}
-          disabled={busy}
-          aria-label={`Télécharger ${doc.libelle}`}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50">
-          {busy ? '…' : 'Télécharger'}
-        </button>
       </div>
-    </div>
+      {onMark && (
+        <div className="document-flags">
+          <button
+            className={'icon-button ' + (mark.saved ? 'selected' : '')}
+            title="À revoir"
+            aria-label={'À revoir : ' + doc.libelle}
+            aria-pressed={Boolean(mark.saved)}
+            onClick={() => onMark('saved')}
+          >
+            <Icon name="star" size={18} />
+          </button>
+          <button
+            className={'icon-button ' + (mark.read ? 'selected read' : '')}
+            title="Lu"
+            aria-label={'Lu : ' + doc.libelle}
+            aria-pressed={Boolean(mark.read)}
+            onClick={() => onMark('read')}
+          >
+            <Icon name="check" size={18} />
+          </button>
+        </div>
+      )}
+    </article>
   )
 }
