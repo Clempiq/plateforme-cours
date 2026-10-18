@@ -1,210 +1,375 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { getClassePublic } from '../api.js'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { getClassePublic, isConfigured } from '../api.js'
+import { getDemoData } from '../demo.js'
+import { filterDocuments, flattenDocuments } from '../catalog.js'
+import { rememberClass, useLocalState } from '../preferences.js'
+import {
+  Header,
+  Footer,
+  EmptyState,
+  Loading,
+  Notice,
+} from '../components/UI.jsx'
+import Icon from '../components/Icon.jsx'
 import DocumentCard from '../components/DocumentCard.jsx'
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { SITE } from '../config.js'
-import { TYPES } from '../lib.js'
 
-// Vue ÉLÈVE — bandeau classe/matière, menu grands titres + chapitres, contenu à droite.
-export default function ClasseEleve() {
+export default function ClasseEleve({ demo = false }) {
   const { slug } = useParams()
-  const [data, setData] = useState(null)
-  const [error, setError] = useState(null)
-  const [q, setQ] = useState('')
-  const [activeId, setActiveId] = useState(null)
-  const [expanded, setExpanded] = useState(() => new Set())
-
+  return <StudentClass key={demo ? 'demo' : slug} slug={slug} demo={demo} />
+}
+function StudentClass({ slug, demo }) {
+  const [data, setData] = useState(null),
+    [error, setError] = useState(''),
+    [reload, setReload] = useState(0)
+  const [query, setQuery] = useState(''),
+    [type, setType] = useState('all'),
+    [scope, setScope] = useState('all'),
+    [chapter, setChapter] = useState('all'),
+    [sort, setSort] = useState('chapter')
+  const [rawMarks, setMarks, stored] = useLocalState(
+    'marks:' + (demo ? 'demo' : slug),
+    {},
+  )
+  const marks =
+    rawMarks && typeof rawMarks === 'object' && !Array.isArray(rawMarks)
+      ? rawMarks
+      : {}
+  const [notice, setNotice] = useState(''),
+    [clear, setClear] = useState(false)
   useEffect(() => {
     let alive = true
-    getClassePublic(slug)
+    setError('')
+    setData(null)
+    const request = demo
+      ? Promise.resolve(getDemoData())
+      : isConfigured
+        ? getClassePublic(slug)
+        : Promise.reject(
+            new Error('La connexion à la plateforme n’est pas configurée.'),
+          )
+    request
       .then((d) => {
-        if (!alive) return
-        setData(d)
-        const firstDom = d.domaines?.find((dm) => dm.chapitres?.length)
-        setActiveId(firstDom?.chapitres?.[0]?.id ?? null)
-        setExpanded(new Set(firstDom ? [firstDom.id] : []))  // premier grand titre déplié
+        if (alive) setData(d)
       })
-      .catch((e) => alive && setError(e.message))
-    return () => { alive = false }
-  }, [slug])
-
-  const toggleDomaine = (dmId) =>
-    setExpanded((prev) => { const n = new Set(prev); n.has(dmId) ? n.delete(dmId) : n.add(dmId); return n })
-
-  const domaines = data?.domaines || []
-  const allChapitres = useMemo(
-    () => domaines.flatMap((dm) => (dm.chapitres || []).map((ch) => ({ ...ch, _domaine: dm.libelle }))),
-    [domaines]
-  )
-  const active = allChapitres.find((c) => c.id === activeId) || allChapitres[0]
-
-  const searchResults = useMemo(() => {
-    if (!q.trim()) return null
-    const needle = q.toLowerCase()
-    const out = []
-    for (const ch of allChapitres)
-      for (const d of ch.documents || [])
-        if (d.libelle.toLowerCase().includes(needle)) out.push({ ...d, _chap: ch.libelle })
-    return out
-  }, [q, allChapitres])
-
-  if (error) {
-    return (
-      <Shell classe="" matiere={SITE.matiere}>
-        <div className="text-center py-20 px-4">
-          <p className="text-4xl mb-3">🔍</p>
-          <p className="text-slate-600">Cette classe est introuvable.</p>
-          <p className="text-sm text-slate-400 mt-1">Vérifie le code transmis par ton professeur.</p>
-        </div>
-      </Shell>
+      .catch((e) => {
+        if (alive) setError(e.message)
+      })
+    return () => {
+      alive = false
+    }
+  }, [slug, demo, reload])
+  const domaines = data?.domaines || [],
+    chapters = domaines.flatMap((d) =>
+      (d.chapitres || []).map((c) => ({ ...c, domaine: d.libelle })),
     )
+  // Demo uses the same explicit publication rule. Production filtering happens in Supabase.
+  const docs = flattenDocuments(domaines).filter((d) => !demo || d.visible)
+  const selected = chapters.find((c) => String(c.id) === chapter)
+  const source =
+    chapter === 'all'
+      ? docs
+      : docs.filter((d) => String(d.chapitreId) === chapter)
+  const results = filterDocuments(source, { query, type, scope, marks, sort })
+  const read = docs.filter((d) => marks[d.id]?.read).length
+  function resetFilters() {
+    setQuery('')
+    setType('all')
+    setScope('all')
+    setChapter('all')
+    setSort('chapter')
   }
-  if (!data) return <Shell classe="" matiere={SITE.matiere}><p className="text-center text-slate-400 py-20">Chargement…</p></Shell>
-
-  const hasContent = allChapitres.length > 0
-
+  function mark(id, field) {
+    setMarks({ ...marks, [id]: { ...marks[id], [field]: !marks[id]?.[field] } })
+  }
   return (
-    <Shell classe={data.classe.libelle} matiere={data.classe.matiere || SITE.matiere}>
-      <div className="px-4 pt-4 max-w-5xl mx-auto w-full">
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Rechercher un document…"
-          aria-label="Rechercher un document"
-          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
-        />
-      </div>
-
-      {!hasContent ? (
-        <p className="text-center text-slate-400 py-16">Aucun document pour le moment.</p>
-      ) : searchResults ? (
-        <div className="max-w-5xl mx-auto w-full px-4 py-4">
-          <h2 className="text-sm font-semibold text-slate-500 mb-3">
-            {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''}
-          </h2>
-          {searchResults.length === 0 && <p className="text-slate-400 text-sm">Aucun document ne correspond.</p>}
-          <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 px-4">
-            {searchResults.map((doc) => (
-              <div key={doc.id}>
-                <p className="text-[11px] text-slate-400 pt-2">{doc._chap}</p>
-                <DocumentCard doc={doc} />
-              </div>
-            ))}
-          </div>
+    <>
+      {demo && (
+        <div className="demo-banner">
+          Démonstration · classe fictive, sans compte.
+          <Link to="/demo/enseignant">Essayer l’espace enseignant →</Link>
         </div>
-      ) : (
-        <div className="max-w-5xl mx-auto w-full px-4 py-4 md:flex md:gap-6">
-          {/* Menu : grands titres + chapitres (desktop) / liste déroulante (mobile) */}
-          <nav className="md:w-72 md:shrink-0 mb-4 md:mb-0">
-            {/* Mobile : sélecteur groupé */}
-            <select
-              className="md:hidden w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm"
-              value={active?.id ?? ''}
-              onChange={(e) => setActiveId(Number(e.target.value))}
-              aria-label="Choisir un chapitre">
-              {domaines.map((dm) => (
-                <optgroup key={dm.id} label={dm.libelle}>
-                  {(dm.chapitres || []).map((ch) => <option key={ch.id} value={ch.id}>{ch.libelle}</option>)}
-                </optgroup>
-              ))}
-            </select>
-
-            {/* Desktop : accordéon grands titres → chapitres */}
-            <div className="hidden md:block space-y-2">
-              {domaines.map((dm) => {
-                const open = expanded.has(dm.id)
-                return (
-                  <div key={dm.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      )}
+      <Header>
+        <Link className="text-link" to="/">
+          Changer de classe
+        </Link>
+      </Header>
+      {data && (
+        <section className="class-heading">
+          <div className="shell">
+            <div>
+              <p className="eyebrow">{data.classe.matiere || SITE.matiere}</p>
+              <h1 className="serif">{data.classe.libelle}</h1>
+              <p className="muted">
+                {chapters.length} chapitres · {docs.length} documents
+                disponibles
+              </p>
+            </div>
+            {!demo && (
+              <button
+                className="btn btn-secondary"
+                onClick={() =>
+                  setNotice(
+                    rememberClass(data.classe)
+                      ? 'Classe ajoutée aux raccourcis de l’accueil, sur cet appareil.'
+                      : 'Le navigateur ne permet pas d’enregistrer ce raccourci.',
+                  )
+                }
+              >
+                <Icon name="plus" size={16} />
+                Retenir ma classe
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+      <main id="main-content" className="shell">
+        {error ? (
+          <EmptyState icon="search" title="La classe n’a pas pu s’ouvrir">
+            <p>
+              {error === 'Classe introuvable'
+                ? 'Vérifie le code transmis par ton professeur.'
+                : error}
+            </p>
+            <button
+              className="btn btn-secondary"
+              style={{ marginTop: 16 }}
+              onClick={() => setReload((v) => v + 1)}
+            >
+              Réessayer
+            </button>
+          </EmptyState>
+        ) : !data ? (
+          <Loading />
+        ) : (
+          <>
+            <Notice kind="success">{notice}</Notice>
+            <div className="class-layout">
+              <aside className="class-sidebar" aria-label="Chapitres">
+                <p className="sidebar-label">MA CLASSE</p>
+                <button
+                  className={
+                    'sidebar-button ' + (chapter === 'all' ? 'active' : '')
+                  }
+                  onClick={() => setChapter('all')}
+                >
+                  <Icon name="grid" size={16} />
+                  Tous les documents<span className="count">{docs.length}</span>
+                </button>
+                {domaines.map((dm) => (
+                  <details className="chapter-group" open key={dm.id}>
+                    <summary>{dm.libelle}</summary>
+                    {(dm.chapitres || []).map((ch) => (
+                      <button
+                        className={
+                          'sidebar-button ' +
+                          (chapter === String(ch.id) ? 'active' : '')
+                        }
+                        key={ch.id}
+                        aria-current={
+                          chapter === String(ch.id) ? 'page' : undefined
+                        }
+                        onClick={() => setChapter(String(ch.id))}
+                      >
+                        {ch.libelle}
+                        <span className="count">
+                          {docs.filter((d) => d.chapitreId === ch.id).length}
+                        </span>
+                      </button>
+                    ))}
+                  </details>
+                ))}
+                <p className="sidebar-label">MES REPÈRES</p>
+                <p className="small muted">
+                  {read} document{read > 1 ? 's' : ''} marqué
+                  {read > 1 ? 's' : ''} comme lu{read > 1 ? 's' : ''}
+                </p>
+                <div className="progress-track">
+                  <span
+                    style={{
+                      width:
+                        (docs.length ? (100 * read) / docs.length : 0) + '%',
+                    }}
+                  />
+                </div>
+                <p className="local-note">
+                  Tes repères restent sur cet appareil. Ils ne sont pas transmis
+                  à ton professeur.
+                </p>
+                <button className="text-link" onClick={() => setClear(true)}>
+                  Effacer mes repères
+                </button>
+              </aside>
+              <section className="student-main" aria-label="Documents">
+                <div className="mobile-chapters">
+                  <label className="field">
+                    Chapitre
+                    <select
+                      value={chapter}
+                      onChange={(e) => setChapter(e.target.value)}
+                    >
+                      <option value="all">Tous les documents</option>
+                      {domaines.map((dm) => (
+                        <optgroup key={dm.id} label={dm.libelle}>
+                          {(dm.chapitres || []).map((ch) => (
+                            <option key={ch.id} value={ch.id}>
+                              {ch.libelle}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p className="eyebrow">
+                  {selected?.domaine || 'Les ressources de ta classe'}
+                </p>
+                <h2 className="serif">
+                  {selected?.libelle || 'À chaque étape, le bon support.'}
+                </h2>
+                {selected?.description && (
+                  <p className="muted description" style={{ marginBottom: 22 }}>
+                    {selected.description}
+                  </p>
+                )}
+                <div className="toolbar">
+                  <label className="search-field">
+                    <span className="sr-only">
+                      Rechercher dans les documents et chapitres
+                    </span>
+                    <Icon name="search" />
+                    <input
+                      className="input"
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Un document, un chapitre, une notion…"
+                    />
+                  </label>
+                </div>
+                <div className="chips" aria-label="Type de document">
+                  {[
+                    ['all', 'Tous'],
+                    ['cours', 'Cours'],
+                    ['controle', 'Contrôles'],
+                    ['correction', 'Corrections'],
+                  ].map(([id, label]) => (
                     <button
-                      onClick={() => toggleDomaine(dm.id)}
-                      aria-expanded={open}
-                      className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-50">
-                      <span className="text-sm font-bold text-slate-700 truncate">{dm.libelle}</span>
-                      <svg className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                      </svg>
+                      key={id}
+                      className="chip"
+                      aria-pressed={type === id}
+                      onClick={() => setType(id)}
+                    >
+                      {label}
                     </button>
-                    {open && (
-                      <div className="px-2 pb-2 flex flex-col gap-1">
-                        {(dm.chapitres || []).map((ch) => {
-                          const isActive = ch.id === active?.id
-                          const n = (ch.documents || []).length
-                          return (
-                            <button
-                              key={ch.id}
-                              onClick={() => setActiveId(ch.id)}
-                              className={`text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between gap-2
-                                ${isActive ? 'bg-emerald-600 text-white font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}>
-                              <span className="truncate">{ch.libelle}</span>
-                              <span className={`text-xs ${isActive ? 'text-emerald-200' : 'text-slate-400'}`}>{n}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                  ))}
+                </div>
+                <div
+                  className="toolbar"
+                  style={{ marginTop: 16, marginBottom: 0 }}
+                >
+                  <label className="sr-only" htmlFor="scope">
+                    Mes repères
+                  </label>
+                  <select
+                    id="scope"
+                    className="input"
+                    value={scope}
+                    onChange={(e) => setScope(e.target.value)}
+                  >
+                    <option value="all">Tous mes documents</option>
+                    <option value="saved">★ À revoir</option>
+                    <option value="unread">Pas encore lus</option>
+                  </select>
+                  <label className="sr-only" htmlFor="sort">
+                    Trier les documents
+                  </label>
+                  <select
+                    id="sort"
+                    className="input"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
+                  >
+                    <option value="chapter">Ordre des chapitres</option>
+                    <option value="recent">Ajouts récents</option>
+                    <option value="name">Ordre alphabétique</option>
+                  </select>
+                </div>
+                <p className="result-count" role="status">
+                  {results.length} document{results.length > 1 ? 's' : ''}
+                  {query ? ' correspondant à ta recherche' : ''}
+                </p>
+                {results.length ? (
+                  <div className="document-list">
+                    {results.map((doc) => (
+                      <DocumentCard
+                        key={doc.id}
+                        doc={doc}
+                        mark={marks[doc.id]}
+                        onMark={(field) => mark(doc.id, field)}
+                        showChapter={chapter === 'all'}
+                      />
+                    ))}
                   </div>
-                )
-              })}
+                ) : (
+                  <div className="panel">
+                    <EmptyState
+                      icon="search"
+                      title={
+                        docs.length
+                          ? 'Aucun document dans cette sélection'
+                          : 'Les cours arrivent bientôt'
+                      }
+                      action={
+                        docs.length ? (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={resetFilters}
+                          >
+                            Réinitialiser les filtres
+                          </button>
+                        ) : null
+                      }
+                    >
+                      {docs.length
+                        ? 'Essaie un autre mot, un autre chapitre ou un autre filtre.'
+                        : 'Ton professeur retrouvera ici les documents qu’il choisit de publier.'}
+                    </EmptyState>
+                  </div>
+                )}
+                <p className="local-note">
+                  ★ À revoir · ✓ Lu — tes repères personnels, sur ce navigateur
+                  uniquement.{' '}
+                  <button className="text-link" onClick={() => setClear(true)}>
+                    Effacer
+                  </button>
+                </p>
+                {!stored && (
+                  <Notice kind="warning">
+                    Le navigateur bloque l’enregistrement : tes repères seront
+                    perdus en quittant cette page.
+                  </Notice>
+                )}
+              </section>
             </div>
-          </nav>
-
-          <section className="flex-1 min-w-0">
-            {active && <ChapitreContenu chapitre={active} />}
-          </section>
-        </div>
-      )}
-    </Shell>
-  )
-}
-
-function ChapitreContenu({ chapitre }) {
-  const docs = chapitre.documents || []
-  const groupes = Object.keys(TYPES)
-    .sort((a, b) => TYPES[a].order - TYPES[b].order)
-    .map((type) => ({ type, items: docs.filter((d) => d.type === type) }))
-    .filter((g) => g.items.length > 0)
-
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">{chapitre._domaine}</p>
-      <h2 className="text-lg font-bold text-slate-800 mb-1">{chapitre.libelle}</h2>
-      {chapitre.description && <p className="text-sm text-slate-500 mb-3">{chapitre.description}</p>}
-      {docs.length === 0 && (
-        <p className="text-sm text-slate-400 bg-white rounded-2xl border border-slate-200 p-6 text-center mt-3">
-          Aucun document disponible dans ce chapitre pour l'instant.
-        </p>
-      )}
-      <div className="space-y-4 mt-3">
-        {groupes.map((g) => (
-          <div key={g.type} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-cream/60">
-              <span className={`w-2 h-2 rounded-full ${TYPES[g.type].dot}`} />
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{TYPES[g.type].label}</span>
-            </div>
-            <div className="px-4 divide-y divide-slate-100">
-              {g.items.map((doc) => <DocumentCard key={doc.id} doc={doc} />)}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function Shell({ classe, matiere, children }) {
-  return (
-    <div className="min-h-screen bg-cream flex flex-col">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-baseline justify-between gap-3">
-          <h1 className="text-lg font-bold text-slate-800 truncate">{classe || 'Classe'}</h1>
-          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-500 shrink-0">{matiere}</p>
-        </div>
-      </header>
-      <main className="flex-1 w-full">{children}</main>
-      <footer className="py-6 text-center text-xs text-slate-400">
-        Documents mis à disposition par ton professeur.
-      </footer>
-    </div>
+          </>
+        )}
+      </main>
+      <Footer />
+      <ConfirmDialog
+        open={clear}
+        title="Effacer tes repères ?"
+        message="Les marques « Lu » et « À revoir » de cette classe seront effacées sur cet appareil."
+        confirmLabel="Effacer les repères"
+        onCancel={() => setClear(false)}
+        onConfirm={() => {
+          setMarks({})
+          setClear(false)
+        }}
+      />
+    </>
   )
 }
