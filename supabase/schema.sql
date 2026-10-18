@@ -204,12 +204,24 @@ create policy "ens storage update" on storage.objects for update to authenticate
 create policy "ens storage delete" on storage.objects for delete to authenticated
   using (bucket_id='documents' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- Lecture publique d'un fichier : uniquement si le document est visible.
+-- La vérification passe par une fonction security definer : un élève (anon)
+-- n'a pas le droit de lire la table documents, donc une sous-requête directe
+-- dans la politique échouerait toujours et bloquerait tous les fichiers.
+-- La fonction ne répond que oui/non pour une clé précise : rien ne fuit.
+create or replace function public.document_est_visible(p_cle text)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from documents where objet_cle = p_cle and visible = true
+  );
+$$;
+grant execute on function public.document_est_visible(text) to anon;
+
 drop policy if exists "public read visible docs" on storage.objects;
 create policy "public read visible docs" on storage.objects
-for select to anon using (
-  bucket_id = 'documents'
-  and exists (select 1 from public.documents d where d.objet_cle = storage.objects.name and d.visible = true)
-);
+for select to anon
+using (bucket_id = 'documents' and public.document_est_visible(name));
 
 -- =====================================================================
 --  Note : plus de jeu de test ici. Les classes/domaines/chapitres se
