@@ -1,10 +1,22 @@
-# 📚 Plateforme de partage de cours — Physique-Chimie
+# 📚 Plateforme de partage de cours (Physique-Chimie)
 
-Application web permettant à une enseignante de mettre ses supports pédagogiques à disposition de ses élèves, organisés par classe et par chapitre, **sans aucun compte élève**. Sa particularité : une **visibilité différée** qui garde les sujets de contrôle et leurs corrigés invisibles jusqu'à publication manuelle — une contrainte de sécurité qui structure toute l'architecture.
+> Une plateforme qui permet à une enseignante de partager ses cours avec ses élèves en un lien, et de publier les sujets de contrôle seulement le jour J.
+
+Application web permettant à une enseignante de mettre ses supports pédagogiques à disposition de ses élèves, organisés par classe et par chapitre, **sans aucun compte élève**. Sa particularité : une **visibilité différée** qui garde les sujets de contrôle et leurs corrigés invisibles jusqu'à publication manuelle, une contrainte de sécurité qui structure toute l'architecture.
 
 **Site :** https://plateforme-cours-vert.vercel.app/ · **Démo élève :** `/#/demo` · **Démo enseignant :** `/#/demo/enseignant` · **Accès enseignant :** `/#/admin`
 
 La version 1.1 ajoute une interface responsive, des repères de révision locaux, des filtres, des consignes de chapitre, la réorganisation du plan et une reprise des enregistrements interrompus. Voir [CHANGELOG.md](./CHANGELOG.md) pour le périmètre et les limites de validation.
+
+---
+
+## 🎯 Le problème
+
+Le projet est né d'un besoin réel : ma sœur, professeure de physique-chimie, voulait mettre ses supports à disposition de ses élèves sans leur imposer de compte, tout en gardant ses sujets de contrôle et leurs corrigés secrets jusqu'au bon moment. Les outils existants (ENT, Drive) étaient soit trop lourds pour les élèves, soit trop risqués pour les contrôles.
+
+**Pour qui :**
+- **L'enseignante**, qui veut organiser ses documents par classe et par chapitre, et décider précisément quand chaque document devient visible.
+- **Les élèves**, qui doivent retrouver un cours en quelques secondes sur leur téléphone, sans inscription.
 
 ---
 
@@ -29,7 +41,7 @@ La version 1.1 ajoute une interface responsive, des repères de révision locaux
 
 Un sujet de contrôle non encore passé est une donnée sensible : sa fuite compromettrait toute une classe. La protection ne repose pas sur l'interface mais sur **trois garanties côté serveur** :
 
-1. **Filtrage en base (Row Level Security).** L'API publique ne renvoie que les lignes `visible = true`. Un document masqué n'est jamais transmis au navigateur — ni son fichier, ni son libellé, ni son existence. Le filtre est appliqué par PostgreSQL, pas par le client.
+1. **Filtrage en base (Row Level Security).** L'API publique ne renvoie que les lignes `visible = true`. Un document masqué n'est jamais transmis au navigateur : ni son fichier, ni son libellé, ni son existence. Le filtre est appliqué par PostgreSQL, pas par le client.
 2. **Fichiers en stockage privé.** Le bucket est privé ; un élève n'obtient un nouveau lien signé que pour un document visible. Les nouveaux liens expirent après 5 minutes. Masquer un document empêche de générer de nouveaux liens ; les liens déjà émis restent valides jusqu’à leur expiration et les copies téléchargées restent sur les appareils.
 3. **Noms de fichiers aléatoires.** Chaque objet est stocké sous une clé imprévisible ; le nom lisible n'existe qu'en base.
 
@@ -53,7 +65,7 @@ Le détail des tables, politiques RLS, fonctions et politiques de stockage se tr
              │  GitHub Actions (cron tous les 2 jours) → ping anti-mise-en-pause
 ```
 
-- **Lecture publique** via une fonction PostgreSQL `get_classe_publique(slug)` (`security definer`) qui renvoie la classe, ses chapitres et **uniquement les documents visibles** — non énumérable.
+- **Lecture publique** via une fonction PostgreSQL `get_classe_publique(slug)` (`security definer`) qui renvoie la classe, ses chapitres et **uniquement les documents visibles**, sans permettre de lister les autres.
 - **Espace enseignante** authentifié (Supabase Auth) ; toutes les écritures passent les politiques RLS `authenticated`.
 - **Horodatage de publication** posé automatiquement par un trigger à la première mise en visibilité, jamais effacé ensuite.
 
@@ -64,7 +76,7 @@ Le détail des tables, politiques RLS, fonctions et politiques de stockage se tr
 | Couche | Technologies |
 |---|---|
 | Front-end | React 18, Vite, Tailwind CSS, React Router (HashRouter) |
-| Back-end | Supabase — PostgreSQL, Row Level Security, Auth, Storage, PostgREST |
+| Back-end | Supabase : PostgreSQL, Row Level Security, Auth, Storage, PostgREST |
 | Hébergement | Vercel (front statique), Supabase (données) |
 | Automatisation | GitHub Actions (cron anti-pause) |
 
@@ -96,6 +108,21 @@ Le fichier [`supabase/schema.sql`](./supabase/schema.sql) est une référence hi
 ## 📦 Déploiement
 
 Import du dépôt dans Vercel (framework Vite détecté automatiquement), ajout des deux variables d'environnement, déploiement. La tâche `.github/workflows/ping-supabase.yml` maintient le projet Supabase actif.
+
+---
+
+## 📌 Statut
+
+✅ **En production, utilisée par une vraie enseignante et ses classes.** Version 1.1 livrée le 18 octobre 2026 (voir [CHANGELOG.md](./CHANGELOG.md)). Les évolutions envisagées (multi-enseignants, multi-matières, interface de gestion des invitations) sont suivies dans [ROADMAP.md](./ROADMAP.md).
+
+---
+
+## 💡 Ce que j'ai appris
+
+- **Partir d'un utilisateur réel** : recueillir le besoin, livrer une V1 courte, puis itérer sur ses retours (V1.1 : filtres, repères de révision, réorganisation du plan).
+- **Faire d'une contrainte métier une exigence d'architecture** : la confidentialité des contrôles est garantie côté serveur (RLS, stockage privé, liens signés), pas par l'interface.
+- **Cadrer le périmètre** : une feuille de route qui distingue clairement la V1 de ce qui est reporté.
+- **Documenter les limites honnêtement** : ce qui ne peut pas être révoqué (fichier déjà téléchargé) est écrit noir sur blanc.
 
 ---
 
